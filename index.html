@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paten Pikku AI Helper</title>
+  <style>
+    :root { color-scheme: dark; --panel:#25234b; --mint:#78f4df; --muted:#c4c1e4; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; font-family:Inter,ui-rounded,system-ui,sans-serif; color:#fbfaff; background:radial-gradient(circle at 18% 12%,#6f4ed755,transparent 28%),radial-gradient(circle at 88% 88%,#22d9ca33,transparent 27%),#100e26; }
+    .app { width:min(760px,94vw); height:min(760px,90vh); min-height:520px; display:grid; grid-template-rows:auto 1fr auto; overflow:hidden; border:1px solid #746cb4; border-radius:28px; background:#1b1939e8; box-shadow:0 24px 90px #0009,0 0 50px #8b65ff33; }
+    header { display:flex; align-items:center; gap:14px; padding:18px 20px; border-bottom:1px solid #514b80; background:linear-gradient(90deg,#25204d,#1f294d); }
+    .orb { width:42px; height:42px; display:grid; place-items:center; border-radius:50%; font-size:23px; background:radial-gradient(circle at 32% 25%,#fff 0 7%,#92ffee 8% 20%,#7c63ff 47%,#302465 100%); box-shadow:0 0 22px #82f6e9aa; }
+    h1 { margin:0; font-size:1.1rem; letter-spacing:.02em; } header p { margin:2px 0 0; color:var(--muted); font-size:.8rem; }
+    #clear { margin-left:auto; border:1px solid #766da9; border-radius:999px; padding:8px 11px; color:#eeeaff; background:#383360; cursor:pointer; }
+    #clear:hover { background:#4c4579; }
+    #chat { min-height:0; overflow:auto; padding:22px; display:flex; flex-direction:column; gap:14px; scrollbar-color:#7b6bb8 transparent; }
+    .message { max-width:82%; padding:12px 14px; border-radius:17px; line-height:1.5; white-space:pre-wrap; animation:arrive .2s ease-out; }
+    .assistant { align-self:flex-start; border:1px solid #58518c; border-bottom-left-radius:4px; background:#302d5d; }
+    .user { align-self:flex-end; border:1px solid #50cfc5; border-bottom-right-radius:4px; color:#12282e; background:linear-gradient(135deg,#a0f8e9,#6bdbdc); }
+    form { display:flex; gap:10px; padding:16px; border-top:1px solid #514b80; background:#201e42; }
+    textarea { flex:1; min-height:48px; max-height:140px; resize:none; padding:13px; border:1px solid #625b98; border-radius:15px; outline:none; color:white; font:inherit; background:#14132e; }
+    textarea:focus { border-color:var(--mint); box-shadow:0 0 0 3px #78f4df22; }
+    button[type=submit] { min-width:92px; border:0; border-radius:15px; color:#15233a; font-weight:800; cursor:pointer; background:linear-gradient(135deg,var(--mint),#8d8cff); }
+    button:disabled { opacity:.55; cursor:wait; }
+    @keyframes arrive { from { opacity:0; transform:translateY(6px); } }
+    @media (max-width:520px) { .app { width:100vw; height:100vh; border:0; border-radius:0; } .message { max-width:90%; } #clear { font-size:.72rem; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header><div class="orb">✦</div><div><h1>Paten Pikku AI Helper</h1><p>Pieni apuri isoihin ja pieniin ideoihin.</p></div><button id="clear" type="button">Tyhjennä muisti</button></header>
+    <section id="chat" aria-live="polite"><div class="message assistant">Moi Pate! Olen sun pikku AI helper. Mitä kehitellään tänään? ✨</div></section>
+    <form id="form"><textarea id="message" aria-label="Kirjoita viesti" placeholder="Kirjoita viesti..." autofocus></textarea><button id="send" type="submit">Lähetä</button></form>
+  </main>
+  <script>
+    const chat = document.querySelector('#chat');
+    const form = document.querySelector('#form');
+    const input = document.querySelector('#message');
+    const send = document.querySelector('#send');
+    let history = JSON.parse(sessionStorage.getItem('paten-ai-history') || '[]');
+
+    const addMessage = (role, text) => {
+      const message = document.createElement('div');
+      message.className = `message ${role}`;
+      message.textContent = text;
+      chat.append(message);
+      chat.scrollTop = chat.scrollHeight;
+      return message;
+    };
+
+    history.forEach(({ role, content }) => addMessage(role, content));
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const message = input.value.trim();
+      if (!message || send.disabled) return;
+      addMessage('user', message);
+      input.value = '';
+      send.disabled = true;
+      const waiting = addMessage('assistant', 'Mietitään hetki...');
+      try {
+        const result = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ message, history }) });
+        const data = await result.json();
+        if (!result.ok) throw new Error(data.error);
+        waiting.textContent = data.reply;
+        history = [...history, { role:'user', content:message }, { role:'assistant', content:data.reply }].slice(-12);
+        sessionStorage.setItem('paten-ai-history', JSON.stringify(history));
+      } catch (error) { waiting.textContent = error.message || 'Jokin meni pieleen.'; }
+      finally { send.disabled = false; input.focus(); }
+    });
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); form.requestSubmit(); }
+    });
+    document.querySelector('#clear').addEventListener('click', () => {
+      history = []; sessionStorage.removeItem('paten-ai-history'); chat.replaceChildren();
+      addMessage('assistant', 'Muisti tyhjennetty. Aloitetaanko alusta? ✨');
+    });
+  </script>
+</body>
+</html>
